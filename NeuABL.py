@@ -10,12 +10,26 @@ from datetime import datetime
 from datetime import timedelta
 #%matplotlib inline
 
+# Initializing in/out file extensions
+in_dir = r"C:\Users\Reese\Desktop\AOS Proj Data"
+out_dir = r"C:\Users\Reese\Desktop\AOS Proj Data\Ouput_Files"
+pbl_in = "\pblht" #Extension for input directory -- Need Month and year on directory
+pbl_out = "\May2019_Neut_Pbl.nc"
+smps_May19_in = "\smps\*.nc"
+smps_qcInc_out = "\May19SMPSqcUsed.nc"
+smps_qcUsed_out = "\May19SMPSqcUsed.nc"
+microbase_in = "\microbase\*.nc"
+microbase_out = "\Microbase_Neu_ABL.nc"
+
+######################################### Neutral ABL File ###########################################3
+#Initializing arrays to hold neutral boundary talyer times/heights
 time_arr = []
 b4_time = []
 aftr_time = []
 pbl_hgt = []
-# Iterate over files in the directory
-directory = r"C:\Users\Reese\Desktop\AOS Proj Data\pblht"
+
+# Iterate over sonde files in the directory
+directory = in_dir+pbl_in
 for filename in os.listdir(directory):
     #Setting path for the given sounding file
     f = os.path.join(directory, filename)
@@ -58,9 +72,10 @@ ds8 = xr.Dataset({
         attrs = {'example_attr': 'this is a global attribute'}
     )
 #Setting path for output netcdf file
-pbl_out_path = r'C:\Users\Reese\Desktop\AOS Proj Data\Ouput_Files\May2019_Neut_Pbl.nc'
+pbl_out_path = out_dir+pbl_out
 ds8.to_netcdf(pbl_out_path,format='NETCDF4')
 
+########################################## AOSSMPS Neutral ABL ##################################################
 #Varaibles/dimentions to drop from AOSsmps
 drop_vars = ['diameter_mobility','base_time','time_offset','time_bounds','diameter_mobility_bounds', 'lower_size', 'dN_dlogDp', 'qc_dN_dlogDp', 'total_SA_conc', 'qc_total_SA_conc', 'dD_to_dSA',
             'total_V_conc', 'qc_total_V_conc', 'dD_to_dV', 'aerosol_flow', 'bypass_flow', 'sheath_flow', 'delay_time', 'geometric_mean',
@@ -70,7 +85,7 @@ drop_vars = ['diameter_mobility','base_time','time_offset','time_bounds','diamet
             'status_flag', 'd50', 'low_voltage', 'high_voltage', 'hv_polarity', 'tube_diameter', 'tube_length', 'DMA_inner_radius',
             'DMA_outer_radius', 'DMA_characteristic_length']
 #path from which to read in AOSSMPS files (1 month)
-smps_in_path = r"C:\Users\Reese\Desktop\AOS Proj Data\smps\*.nc"
+smps_in_path = in_dir+smps_May19_in
 dsA = act.io.armfiles.read_netcdf(smps_in_path, drop_variables=drop_vars)
 
 #subsetting AOSsmps by neutral boundary layer info
@@ -100,27 +115,34 @@ tester.clean.cleanup()
 #Applying DQR's for total number concentration
 var2 = 'total_N_conc'
 obj2 = act.qc.arm.add_dqr_to_qc(tester, variable = var2)
+
 #Normalizing quality control assessments
 obj2.clean.normalize_assessment()
-smps_qc_inc_path = r'C:\Users\Reese\Desktop\AOS Proj Data\Ouput_Files\SMPSqcInc.nc'
+
+#Output the new neutral abl aossmps containing the applied dqr and qc variable
+smps_qc_inc_path = out_dir+smps_qcInc_out
 obj2.to_netcdf(smps_qc_inc_path,format='NETCDF4')
+
 #We also want to make a file with the qc value applied and tossed.
-obj2.qcfilter.datafilter(variables = 'total_N_conc', rm_assessments=['Bad', 'Incorrect', 'Indeterminate', 'Suspect'])
-smps_qc_applied = r'C:\Users\Reese\Desktop\AOS Proj Data\Ouput_Files\SMPSqcUsed.nc'
+obj2.qcfilter.datafilter(variables='total_N_conc', rm_assessments=['Bad', 'Incorrect', 'Indeterminate', 'Suspect'])
+smps_qc_applied = out_dir+smps_qcUsed_out
 obj2.to_netcdf(smps_qc_applied,format='NETCDF4')
-#-----------------------------------------------------------------------------------------------------------------------
-#We next begin working with the Microbase product
-micro_in_path=r'C:\Users\Reese\Desktop\AOS Proj Data\microbase\*.nc'
+
+####################################### Microbase Product Neutral ABL #########################################
+#Set path to Microbase product files & Creating Microbase Dataset
+micro_in_path=in_dir+microbase_in
 micro_drp_vars = ['base_time'] #Add or subtract as needed
 micro = act.io.armfiles.read_netcdf(micro_in_path, drop_variables=micro_drp_vars)
+
 #Setting start and end times for an initial neutral pbl dataset that can be added to
 strt = ds8['b4_time'][0].values
 end = ds8['aftr_time'][0].values
 hgt = ds8['pbl_hgt'][0].values
+
 #slicing the full microbase dataset by the start time, endtime, and pbl height of the first index of neutral ABL dataset
 micro_pbl_neutrl = micro.sel(time=slice(strt, end), height=slice(0,hgt))
 
-#Create a full dataset of neutral abl MICROBASE info
+#Create a full neutral ABL dataset of Microbase product info
 end = len(ds8['b4_time']) #THIS MUST BE SWITCHED IN BELOW LOOP AS END OF RANGE WHEN USING A MONTH
 # Looping over the indexes of the neutral pbl file to concat with initial dataset
 for idx in range(1,20): #Only looping through twenty because we are using three days of data!! switch out for 'end'
@@ -139,5 +161,5 @@ for idx in range(1,20): #Only looping through twenty because we are using three 
         temp = micro.sel(time=slice(strt, end), height=slice(0,hgt))
         micro_pbl_neutrl = xr.concat([micro_pbl_neutrl, temp], dim='time')
 #Saving the fully subset (by neutral abl times/heights) to netCDF file
-micro_out_path = r'C:\Users\Reese\Desktop\AOS Proj Data\Ouput_Files\Microbase_Neu_ABL.nc'
+micro_out_path = out_dir+microbase_out
 micro_pbl_neutrl.to_netcdf(micro_out_path,format='NETCDF4')
