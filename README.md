@@ -12,3 +12,4 @@ Acts as a driver script for calling functions that will either create daily pblh
 ## PblIdxTest.py
 Called by argTest.py if user wishes to create daily pblHgt files with launch times and pbl hgt.
 ## generic_proc_idx.py
+called by argTest.py to subset a given aos product by the pbl hgt/time over a given period
