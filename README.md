@@ -10,5 +10,5 @@ This file does what the TestBook does, but it is put into a python script as opp
 ## argTest.py
 Acts as a driver script for calling functions that will either create daily pblhgt sonding files or subset a given product by hgt/times of neutral boundary layer
 ## PblIdxTest.py
-
+Called by argTest.py if user wishes to create daily pblHgt files with launch times and pbl hgt.
 ## generic_proc_idx.py
