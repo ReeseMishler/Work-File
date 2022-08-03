@@ -75,7 +75,7 @@ def pbl_idx(
     -------
 		..code-block:: python
 
-			from PblIdxTest import pbl_idx
+			from argTest import pbl_idx
     		pbl_idx(out_dir='/home/mishler/Output_files',site='sgp',facility='C1',lvl='c1',s_yr=2019,
     				s_mon=5, s_day=01, e_yr=2019, e_mon=6, e_day=01)
 
@@ -92,18 +92,18 @@ def pbl_idx(
     facility = facility
     lvl = lvl
     #instantiating path string the server archive
-    #archive_path = r'/data/archive' #-------------------------------------------------------------------------------------------USE PATH OBJ!!!!
+    
     archive_path = Path('/data','archive')
     out_dir = out_dir
     #Instantiating path to output directory for generated files
-    pbl_out = Path(out_dir, 'neut_pbl_hgt') 
+    pbl_out = Path(out_dir, 'neut_pbl_hgt', site, facility)  
     newdir = pbl_out
     #Creating the directory if it does not yet exist
     newdir.mkdir(parents=True, exist_ok=True)
     #instantiating string to located data files on server
     site_loc = f'{site}pblhtsonde1mcfarl{facility}.{lvl}'
     #Setting path string to directory of pblhtsondemcfarl1 files
-    #pbl_in = f'{archive_path}/{site}/{site_loc}'#-------------------------------------------------------------------------------USE PATH OBJ!!!!
+    
     pbl_in = Path(archive_path,site,site_loc)
     #Setting a tag name for outputfiles
     site_tag = f'{site}{facility}_'
@@ -139,7 +139,7 @@ def pbl_idx(
         for file in files:
             num_files += 1
         if num_files == 0:
-            print("------No sonding files for", day_str)
+            print(f"------No sonding files for {day_str} at path: {pbl_in}")
             #Checking if a new month is being processed
             if comp_str[5] != day_str[5]:
                 print("**Started processing month", used_mon + 1)
@@ -174,14 +174,24 @@ def pbl_idx(
         for var_name in ['lat', 'lon', 'alt']:
             try:
                 ds_object[var_name] = ds_object[var_name].isel(time=0).drop('time')
-            except:
+            except ValueError as e:
                 exit_flag = True
-                print("------An error occured while making lat/lon/alt scalr on", day_str)
+                print("------An error occured error occured while dropping time dimension from lat/lon/alt on", day_str)
+                print("           Error message: ", e)
                 if comp_str[5] != day_str[5]:
                     print("**Started processing month", used_mon + 1)
                     used_mon += 1
                     comp_str = day_str
                 break
+            except Exception as e: 
+              	exit_flag = True
+              	print("------An unforseen error occured while dropping time dimension from lat/lon/alt on", day_str)
+              	print("           Error message: ", e)
+              	if comp_str[5] != day_str[5]:
+              		print("**Started processing month", used_mon + 1)
+              		used_mon += 1
+              		comp_str = day_str
+              	break  
         if exit_flag:
             curr_date = curr_date + datetime.timedelta(days=1)
             count += 1
@@ -197,9 +207,12 @@ def pbl_idx(
         #Creating NETCDF file with daily dataset and storing file in 'neut_pbl_hgt' subdirectory
         # within the provided directory
         path_out = Path(pbl_out,f'{site_tag}{day_str}_pbl_info.nc')
-        #ds_object.to_netcdf(f'{pbl_out}/{site_tag}{day_str}_pbl_info.nc', format='NETCDF4')#--------------------CREATE PATH OBJ FOR THIS!!!!!
-        ds_object.to_netcdf(path_out, format='NETCDF4')
-        print(f"Created {site_tag}{day_str}_pbl_info.nc at path: {pbl_out}")
+        try:
+        	ds_object.to_netcdf(path_out, format='NETCDF4')
+        	print(f"Created {site_tag}{day_str}_pbl_info.nc at path: {pbl_out}")
+        except Exception as e:
+        	print("!!! Error message: ",e) 
+        
         #Checking if a new month has begun processing
         if comp_str[5] != day_str[5]:
             print("**Started processing month", used_mon + 1)
@@ -280,17 +293,21 @@ def datastream_idx(
     -------
         ..code-block:: python
 
-            from generic_proc_idx import datastream_idx
+            from argTest import datastream_idx
             datastream_idx(out_dir='/home/mishler/Output_files',datastream='aossmps',site='sgp',facility='E13',lvl='b1',
-                    sond_fac='C1',s_yr=2019,s_mon=5, s_day=01, e_yr=2019, e_mon=6, e_day=01)
+                    sond_fac='C1',s_yr=2019,s_mon=5, s_day=1, e_yr=2019, e_mon=6, e_day=1)
 
     """
+    #set of datastreams that have been used for subsetting so far. A list of the data variables that are want to be kept
+    # from these datastreams are in the keep_vars variable. Update as more datastreams are used.
+    datastream_set = {'microbasekaplus', 'aossmps'}
 
     #instantiating variables with parameter info
     keep_vars = ['total_N_conc','qc_total_N_conc','base_time', 'liquid_water_content', 'liquid_water_content_uncertainty_random',
-    			'qc_liquid_water_content', 'ice_water_content', 'ice_water_content_uncertainty_random', 'qc_ice_water_content', 'liq_effective_radius',
-				'liq_effective_radius_uncertainty_random', 'qc_liq_effective_radius', 'ice_effective_radius', 'ice_effective_radius_uncertainty_random', 
-				'qc_ice_effective_radius', 'aqc_precip', 'lat', 'lon', 'alt']
+    		'qc_liquid_water_content', 'ice_water_content', 'ice_water_content_uncertainty_random', 'qc_ice_water_content', 'liq_effective_radius',
+    		'liq_effective_radius_uncertainty_random', 'qc_liq_effective_radius', 'ice_effective_radius', 'ice_effective_radius_uncertainty_random', 
+    		'qc_ice_effective_radius', 'aqc_precip', 'lat', 'lon', 'alt']
+
 
     datastream = datastream
     site = site
@@ -305,23 +322,21 @@ def datastream_idx(
     end_day = e_day
     out_dir = out_dir
     #instantiating string to locate data files on server archive
-    site_loc = f'/{site}{datastream}{facility}.{lvl}'#-------------------------------------------------------USE PATH OBJECT WHERRE THIS GOES TO GET RIF OF '/'
+        
     site_loc2 = f'{site}{datastream}{facility}.{lvl}'
     sonde_site_loc = f'{site}{sonde_facility}'  
     #instantiating path string the server archive
     micro_in = Path('/data','archive',site,site_loc2)
-    
+        
     #Setting a path to the directory containing the neutral hgt/time files
-    pbl_directory = Path(out_dir, 'neut_pbl_hgt') #----------------------------------------------------------------NEED TO CHECK AND SEE IF THIS EXISTS!!!!
+    pbl_directory = Path(out_dir, 'neut_pbl_hgt', site, sonde_facility) 
     if Path(pbl_directory).exists()==False:
-    	print("No directory exists constaining the daily pbl files for neutral regime indexing. Please create these first.")
-    	return
-    	#pbl_directory = Path('/home/mishler/Output_files', 'neut_pbl_hgt')
-    
+        print("No directory exists constaining the daily pbl files for neutral regime indexing. Please create these first.")
+        return 
     #Tag for the output netcdf files
     micro_out_dir = f'neut_{datastream}'
-    #Setting path to the directory netcdf files will be placed and created directory if it doesnt exists
-    out_dir = Path(out_dir, micro_out_dir)
+    #Setting path to the directory netcdf files will be placed in and create directory if it doesnt exists
+    out_dir = Path(out_dir, micro_out_dir, site, facility)
     newdir = out_dir
     newdir.mkdir(parents=True, exist_ok=True)
     #Setting varaible to hold date of final day in range of generated files (NONINCLUSIVE)
@@ -331,145 +346,285 @@ def datastream_idx(
     date = datetime.datetime(year=curr_yr, month=curr_mo, day=curr_day)
     #looping over each day in the provided date range
     while date < end_date:
+        micro_dataset_open = False
         day_str = date.strftime("%Y%m%d")
-        #tag for finding daily product file in archive
-        out_tag = f'{site}{datastream}{facility}_{day_str}' #------------------------------------------WHERE DOES THIS GO?!? USE PATH OBJECT TO GET RID OF '/'
-        micro_in_day = f'{site_loc}.{day_str}*' #f'{site_loc2}.{day_str}*'
+        #tag for finding daily datastream file in archive
+
+        out_tag = f'{site}{datastream}{facility}_{day_str}'
+        micro_in_day = f'{site_loc2}.{day_str}*'
         #Using day to name output NETCDF file
-        micro_out_fn = f'{out_tag}_neuPbl.nc' 
-
-        ##################################### Variables to drop from AOSSMPS & MICROBASE #############################################
-        if datastream == 'microbasekaplus':
-            drp_vars = ['time_offset', 'time_bounds', 'height_bounds', 'aqc_liquid_water_content',
-                        'aqc_ice_water_content','aqc_liq_effective_radius', 'aqc_ice_effective_radius',
-                        'aqc_retrieval', 'aqc_clear_cloud','mwr_scale_factor', 'aqc_stat2_lwp']
-        elif datastream == 'aossmps':
-            drp_vars = ['diameter_mobility', 'base_time', 'time_offset', 'time_bounds',
-                        'diameter_mobility_bounds','lower_size', 'dN_dlogDp', 'qc_dN_dlogDp', 'total_SA_conc',
-                        'qc_total_SA_conc','dD_to_dSA','total_V_conc', 'qc_total_V_conc', 'dD_to_dV', 'aerosol_flow',
-                        'bypass_flow','sheath_flow','delay_time', 'geometric_mean', 'geometric_std', 'mean', 'median',
-                        'mode','sample_temperature','sample_relative_humidity', 'sample_pressure', 'mean_free_path',
-                        'gas_viscosity','reference_gas_temperature','reference_gas_pressure', 'reference_mean_free_path',
-                        'reference_gas_viscosity','sutherland_constant','diffusion_correction', 'multiple_charge_correction',
-                        'nanoparticle_agglomerate_mobility_analysis','status_flag', 'd50', 'low_voltage', 'high_voltage',
-                        'hv_polarity', 'tube_diameter','tube_length','DMA_inner_radius', 'DMA_outer_radius', 'DMA_characteristic_length']
-        else:
-            drp_vars = []
-
-        #Counting the number product files available for the given day
+        micro_out_fn = f'{out_tag}_neuPbl.nc'
+        #Counting the number of datastream files available for the given day
         #If none available, no new file will be generated for this day and program
-        # will move on to the next day in date range.
-        
-        #micro_in_path = f'{micro_in}{micro_in_day}' #-------------------------------------------------------------USE PATH OBJECT wherever this goes!!!!!!!!1
-        micro_in_path = Path(micro_in,micro_in_day)
-        
+        # will move on to the next day in date range. 
+        #
+        #Setting path to the full datastream file for the given data
+        micro_in_path = Path(micro_in,micro_in_day) 
         files = micro_in.glob('*.' + day_str + '.*')
         num_files = 0
         for file in files:
             num_files += 1
-        if num_files == 0:
+        if num_files > 1:
+            print(f'More than one daily {datastream} file for {day_str}. Number of files: {num_files} \n Creating multiple daily files..')
+            #date = date + datetime.timedelta(days=1)
+            #continue
+            cc = 1
+            files = micro_in.glob('*.' + day_str + '.*')
+            for file in files: #need an and statement for (is this file one) bc we need to concat
+                print(file)
+                if (datastream not in datastream_set) and (cc==1): 
+                    dsA = act.io.armfiles.read_netcdf(str(file), drop_variables=[])
+                    
+                elif (datastream in datastream_set) and (cc==1):
+                    
+                    dsA = act.io.armfiles.read_netcdf(str(file), keep_variables=keep_vars)
+
+                    #STARTING INSERT
+                pbl_path = Path(pbl_directory, f'{sonde_site_loc}_{day_str}*')
+                try:
+                    pbl_obj = act.io.armfiles.read_netcdf(str(pbl_path))
+                except OSError as e:
+                    print(f"------No {site}{sonde_facility} pbl info files for {day_str} at {pbl_path}")
+                    #print("             ERROR meassage: ", e) 
+                    date = date + datetime.timedelta(days=1)
+                    continue
+                except Exception as e:
+                    print("------An unforseen error occurred while creating pblht dataset for path ", pbl_path)
+                    print("          Error message: ", e)
+                    date = date + datetime.timedelta(days=1)
+                    continue
+                        #Ensuring the pblht file is in order WRT time, applying DQR for regime type and pbl height, and applying QC     
+                pbl_obj = pbl_obj.sortby('time')
+                pbl_obj.clean.cleanup()
+                var2 = 'pbl_regime_type_liu_liang'
+                pbl_obj = act.qc.arm.add_dqr_to_qc(pbl_obj, variable=var2)
+                pbl_obj.clean.normalize_assessment()
+                pbl_obj.qcfilter.datafilter(variables='qc_pbl_regime_type_liu_liang', rm_assessments=['Bad', 'Incorrect'])
+                var3 = 'pbl_height_liu_liang'
+                pbl_obj = act.qc.arm.add_dqr_to_qc(pbl_obj, variable=var3)
+                pbl_obj.clean.normalize_assessment()
+                pbl_obj.qcfilter.datafilter(variables='qc_pbl_height_liu_liang', rm_assessments=['Bad', 'Incorrect'])
+                # SELECT NEUTRAL REGIME ONLY from pblht dataset 
+                pbl_obj = pbl_obj.sel(time=pbl_obj['pbl_regime_type_liu_liang'] == 0)
+
+                try:
+                    aaa = pbl_obj['time'][0].values - np.timedelta64(90, 'm')  # 90 min before launch
+                    bbb = pbl_obj['time'][0].values + np.timedelta64(90, 'm')  # 90 min after launch
+                    hgt = pbl_obj['pbl_height_liu_liang'][0].values 
+                except IndexError as e:
+                    print(f"-----No neutral regime times for {day_str}")
+                    #print("          ERROR message: ", e)
+                    date = date + datetime.timedelta(days=1)
+                    continue
+                except Exception as e: 
+                    print(f"-----Unforseen ERROR ocured while subsetting datastream by pblht time/height for {day_str}")
+                    print("            Error message: ", e)
+                    date = date + datetime.timedelta(days=1)
+                    continue
+                #some datastreams can be subset be the pblhgt as well as time
+                #print("Atarting the indexing of dsA")
+                if 'height' in dsA.dims:
+                    datastream_obj = dsA.sel(time=slice(aaa, bbb), height=slice(0, hgt))
+                else:
+                    #print("*******GOOOGLLE****************")
+                    datastream_obj = dsA.sel(time=slice(aaa, bbb))
+
+                        ## Setting up an end to the loop
+                last = len(pbl_obj['time']) 
+                # looping through the remaining neutral boundary layer times for day & concatenating into one dataset 
+                for idx in range(1, last):
+                # Check to see if the new dataset start time occurs BEFORE the ending time of the previous dataset
+                    if (pbl_obj['time'][idx].values - np.timedelta64(90, 'm')) <= (pbl_obj['time'][idx - 1].values + np.timedelta64(90, 'm')):
+                    # if the start time of an iteration overlaps with the endtime of the previous,
+                    # we set the new start time to 1 minute after the previous end time
+                        strt = (pbl_obj['time'][idx - 1].values + np.timedelta64(90, 'm')) + np.timedelta64(1, 'm')
+                        end = pbl_obj['time'][idx].values + np.timedelta64(90, 'm')
+                        hgt = pbl_obj['pbl_height_liu_liang'][idx].values
+                        if 'height' in dsA.dims:
+                            temp = dsA.sel(time=slice(strt, end), height=slice(0, hgt))
+                        else:
+                            temp = dsA.sel(time=slice(strt, end))                
+                        datastream_obj = xr.concat([datastream_obj, temp], dim='time')
+                    else:
+                        strt = pbl_obj['time'][idx].values - np.timedelta64(90, 'm')
+                        end = pbl_obj['time'][idx].values + np.timedelta64(90, 'm')
+                        hgt = pbl_obj['pbl_height_liu_liang'][idx].values
+                        if 'height' in dsA.dims:
+                            temp = dsA.sel(time=slice(strt, end), height=slice(0, hgt))
+                        else:
+                            temp = dsA.sel(time=slice(strt, end))
+                        datastream_obj = xr.concat([datastream_obj, temp], dim='time')
+
+                ## Getting into correct format for DQR application
+                datastream_obj.clean.cleanup()
+                #print("Finished cleaning")
+                ## Applying DQR's to each data variable available
+                datastream_obj = act.qc.arm.add_dqr_to_qc(datastream_obj)
+                #print("Finished applying dqr") 	  
+                # Normalizing quality control assessments -- not sure this is needed b/c its set to true in ad_dqr_to_qc
+                datastream_obj.clean.normalize_assessment()
+                # Making sure 'missing_value' attribute is on flag and not its own attr
+                #print("Starting flag_values/missing values work")
+                for var_name in datastream_obj.data_vars:
+                    if ('missing_value' in datastream_obj[var_name].attrs) and ('flag_values' in datastream_obj[var_name].attrs):
+                        datastream_obj[var_name].attrs['flag_values']=np.append(datastream_obj[var_name].attrs['flag_values'], -9999)
+                        if type(datastream_obj[var_name].attrs['flag_meanings'])==np.ndarray:
+                            datastream_obj[var_name].attrs['flag_meanings']=np.append(datastream_obj[var_name].attrs['flag_meanings'], 'missing')
+                        elif type(datastream_obj[var_name].attrs['flag_meanings'])==list:
+                            datastream_obj[var_name].attrs['flag_meanings'].append('missing')
+                        elif type(datastream_obj[var_name].attrs['flag_meanings'])==str:
+                            datastream_obj[var_name].attrs['flag_meanings'] += ' missing' 
+                        else:
+                            print("Flag means=ings is neight a np.ndarray, list, or string")
+                        del datastream_obj[var_name].attrs['missing_value']
+                    elif 'missing_value' in datastream_obj[var_name].attrs:
+                        del datastream_obj[var_name].attrs['missing_value']
+
+                # Output the new neutral abl datastream containing the applied dqr to neut_{datastream} subdirectory
+                # of given output directory
+                micro_out_fn = f'{out_tag}({cc})_neuPbl.nc'
+                datastream_path = Path(out_dir,micro_out_fn)
+                try:
+                    datastream_obj.to_netcdf(datastream_path, format='NETCDF4')
+                except Exception as e:
+                    print("!!! Error message: ",e)
+                print(f"Created {micro_out_fn} at path: {out_dir}")
+                cc += 1
+            #micro_dataset_open = True
+        elif num_files == 0:
             print(f"------No {site}{datastream}{facility}.{lvl} files for {day_str} for path {micro_in_path}") 
             date = date + datetime.timedelta(days=1)
             continue
-
-        #creating a dataset with the daily datastream files
-        dsA = act.io.armfiles.read_netcdf(str(micro_in_path), drop_variables=drp_vars)
+        #creating a dataset with the daily datastream files -- only occurs if files exist
+        #Checking if datastream is one that has been added to datastream set, and if not, keeping all data variables
+        else: #only one datafile
+            if (datastream not in datastream_set) and (micro_dataset_open==False): 
+                dsA = act.io.armfiles.read_netcdf(str(micro_in_path), drop_variables=[]) 
+            elif micro_dataset_open==False:
+                dsA = act.io.armfiles.read_netcdf(str(micro_in_path), keep_variables=keep_vars) #----------------------------------NEED TO ONLY DO THIS IF DSA UNOPENED
+            #print("Past the second opening of datafile")
+            #Setting a path string to the pblht files corresponding to this day -- possibly does not exists
+            pbl_path = Path(pbl_directory, f'{sonde_site_loc}_{day_str}*')
+            #Attempting to create a dataset with pblht files. If none exist, the datastream
+            # cannot be subset by neutral pbl information and will thus be skipped
+            try:
+                pbl_obj = act.io.armfiles.read_netcdf(str(pbl_path))
+            except OSError as e:
+                print(f"------No {site}{sonde_facility} pbl info files for {day_str} at {pbl_path}")
+                #print("             ERROR meassage: ", e) 
+                date = date + datetime.timedelta(days=1)
+                continue
+            except Exception as e:
+                print("------An unforseen error occurred while creating pblht dataset for path ", pbl_path)
+                print("          Error message: ", e)
+                date = date + datetime.timedelta(days=1)
+                continue
         
-        #Setting a path string to the pblht files corresponding to this day
-        #pbl_path = f'{pbl_directory}/{sonde_site_loc}_{day_str}*' #--------------------------------------------------------USE PATH OBJECT!!!!!
-        
-        pbl_path = Path(pbl_directory, f'{sonde_site_loc}_{day_str}*')
-
-        #Attempting to create a dataset with pblht files. If none exists, the datastream
-        # cannot be subset by neutral pbl information and will thus be skipped
-        try:
-        	pbl_obj = act.io.armfiles.read_netcdf(str(pbl_path))
-        except:
-        	print(f"------No {site}{sonde_facility} pbl info files for {day_str}")
-        	date = date + datetime.timedelta(days=1)
-        	continue
-        
-        #Ensuring the pblht file is in order WRT time, applying DQR for regime type and pbl height, and applying QC
-        
-        pbl_obj = pbl_obj.sortby('time')
-        pbl_obj.clean.cleanup()
-        var2 = 'pbl_regime_type_liu_liang'
-        pbl_obj = act.qc.arm.add_dqr_to_qc(pbl_obj, variable=var2)
-        pbl_obj.clean.normalize_assessment()
-        pbl_obj.qcfilter.datafilter(variables='qc_pbl_regime_type_liu_liang', rm_assessments=['Bad', 'Incorrect'])
-        var3 = 'pbl_height_liu_liang'
-        pbl_obj = act.qc.arm.add_dqr_to_qc(pbl_obj, variable=var3)
-        pbl_obj.clean.normalize_assessment()
-        pbl_obj.qcfilter.datafilter(variables='qc_pbl_height_liu_liang', rm_assessments=['Bad', 'Incorrect'])
-        # SELECT NEUTRAL REGIME ONLY from oblht dataset
-        
-        pbl_obj = pbl_obj.sel(time=pbl_obj['pbl_regime_type_liu_liang'] == 0)
-        
-        
-
-        #######SETTING UP INTITAL PIECE OF NEUTRALLY SUBSET DATA datastream AND THEN ADDING PIECES TO IT#########
-        # subsetting datastream by neutral boundary layer info
-        # We are using 90 minutes before and after a given launch time w/ neutral regime
-        try:
-        	aaa = pbl_obj['time'][0].values - np.timedelta64(90, 'm')  # 90 min before launch
-        	bbb = pbl_obj['time'][0].values + np.timedelta64(90, 'm')  # 90 min after launch
-        	hgt = pbl_obj['pbl_height_liu_liang'][0].values 
-        except:
-        	print(f"No neutral regime times for {day_str}")
-        	date = date + datetime.timedelta(days=1)
-        	continue
-        #microbasekaplus can be subset be the pblhgt as well as time
-        if datastream == 'microbasekaplus':
-            datastream_obj = dsA.sel(time=slice(aaa, bbb), height=slice(0, hgt))
-        else:
-            datastream_obj = dsA.sel(time=slice(aaa, bbb))
+            #Ensuring the pblht file is in order WRT time, applying DQR for regime type and pbl height, and applying QC     
+            pbl_obj = pbl_obj.sortby('time')
+            pbl_obj.clean.cleanup()
+            var2 = 'pbl_regime_type_liu_liang'
+            pbl_obj = act.qc.arm.add_dqr_to_qc(pbl_obj, variable=var2)
+            pbl_obj.clean.normalize_assessment()
+            pbl_obj.qcfilter.datafilter(variables='qc_pbl_regime_type_liu_liang', rm_assessments=['Bad', 'Incorrect'])
+            var3 = 'pbl_height_liu_liang'
+            pbl_obj = act.qc.arm.add_dqr_to_qc(pbl_obj, variable=var3)
+            pbl_obj.clean.normalize_assessment()
+            pbl_obj.qcfilter.datafilter(variables='qc_pbl_height_liu_liang', rm_assessments=['Bad', 'Incorrect'])
+            # SELECT NEUTRAL REGIME ONLY from pblht dataset 
+            pbl_obj = pbl_obj.sel(time=pbl_obj['pbl_regime_type_liu_liang'] == 0)
+            #print("Created pbl_obj")
         
 
-        ## Setting up an end to the loop
-        last = len(pbl_obj['time'])
-
-        # looping through the remaining neutral boundary layer times for day & concatenating into one dataset 
-        for idx in range(1, last):
-            # Check to see if the new dataset start time occurs BEFORE the ending time of the previous dataset
-            if (pbl_obj['time'][idx].values - np.timedelta64(90, 'm')) <= (
-                    pbl_obj['time'][idx - 1].values + np.timedelta64(90, 'm')):
-                # if the start time of an iteration overlaps with the endtime of the previous,
-                # we set the new start time to 1 minute after the previous end time
-                strt = (pbl_obj['time'][idx - 1].values + np.timedelta64(90, 'm')) + np.timedelta64(1, 'm')
-                end = pbl_obj['time'][idx].values + np.timedelta64(90, 'm')
-                hgt = pbl_obj['pbl_height_liu_liang'][idx].values
-                if datastream == 'microbasekaplus':
-                	temp = dsA.sel(time=slice(strt, end), height=slice(0, hgt))
-                else:
-                	temp = dsA.sel(time=slice(strt, end))                
-                datastream_obj = xr.concat([datastream_obj, temp], dim='time')
+            #######SETTING UP INTITAL PIECE OF NEUTRALLY SUBSET data stream AND THEN ADDING PIECES TO IT#########
+            # subsetting datastream by neutral boundary layer info
+            # We are using 90 minutes before and after a given launch time w/ neutral regime
+            try:
+                aaa = pbl_obj['time'][0].values - np.timedelta64(90, 'm')  # 90 min before launch
+                bbb = pbl_obj['time'][0].values + np.timedelta64(90, 'm')  # 90 min after launch
+                hgt = pbl_obj['pbl_height_liu_liang'][0].values 
+            except IndexError as e:
+                print(f"-----No neutral regime times for {day_str}")
+                #print("          ERROR message: ", e)
+                date = date + datetime.timedelta(days=1)
+                continue
+            except Exception as e: 
+                print(f"-----Unforseen ERROR ocured while subsetting datastream by pblht time/height for {day_str}")
+                print("            Error message: ", e)
+                date = date + datetime.timedelta(days=1)
+                continue
+            #some datastreams can be subset be the pblhgt as well as time
+            #print("Atarting the indexing of dsA")
+            if 'height' in dsA.dims:
+                datastream_obj = dsA.sel(time=slice(aaa, bbb), height=slice(0, hgt))
             else:
-                strt = pbl_obj['time'][idx].values - np.timedelta64(90, 'm')
-                end = pbl_obj['time'][idx].values + np.timedelta64(90, 'm')
-                hgt = pbl_obj['pbl_height_liu_liang'][idx].values
-                if datastream == 'microbasekaplus':
-                	temp = dsA.sel(time=slice(strt, end), height=slice(0, hgt))
+                #print("*******GOOOGLLE****************")
+                datastream_obj = dsA.sel(time=slice(aaa, bbb))
+            #print("Finished first indexing of dsA")
+        
+
+            ## Setting up an end to the loop
+            last = len(pbl_obj['time']) 
+            # looping through the remaining neutral boundary layer times for day & concatenating into one dataset 
+            for idx in range(1, last):
+                # Check to see if the new dataset start time occurs BEFORE the ending time of the previous dataset
+                if (pbl_obj['time'][idx].values - np.timedelta64(90, 'm')) <= (pbl_obj['time'][idx - 1].values + np.timedelta64(90, 'm')):
+                    # if the start time of an iteration overlaps with the endtime of the previous,
+                    # we set the new start time to 1 minute after the previous end time
+                    strt = (pbl_obj['time'][idx - 1].values + np.timedelta64(90, 'm')) + np.timedelta64(1, 'm')
+                    end = pbl_obj['time'][idx].values + np.timedelta64(90, 'm')
+                    hgt = pbl_obj['pbl_height_liu_liang'][idx].values
+                    if 'height' in dsA.dims:
+                        temp = dsA.sel(time=slice(strt, end), height=slice(0, hgt))
+                    else:
+                        temp = dsA.sel(time=slice(strt, end))                
+                    datastream_obj = xr.concat([datastream_obj, temp], dim='time')
                 else:
-                	temp = dsA.sel(time=slice(strt, end))
-                datastream_obj = xr.concat([datastream_obj, temp], dim='time')
-        ## Getting into correct format for DQR application
-        datastream_obj.clean.cleanup()
+                    strt = pbl_obj['time'][idx].values - np.timedelta64(90, 'm')
+                    end = pbl_obj['time'][idx].values + np.timedelta64(90, 'm')
+                    hgt = pbl_obj['pbl_height_liu_liang'][idx].values
+                    if 'height' in dsA.dims:
+                        temp = dsA.sel(time=slice(strt, end), height=slice(0, hgt))
+                    else:
+                        temp = dsA.sel(time=slice(strt, end))
+                    datastream_obj = xr.concat([datastream_obj, temp], dim='time')
+            #print("Finished FULLY indexing of dsA")
+            ## Getting into correct format for DQR application
+            datastream_obj.clean.cleanup()
+            #print("Finished cleaning")
+            ## Applying DQR's to each data variable available
+            datastream_obj = act.qc.arm.add_dqr_to_qc(datastream_obj)
+            #print("Finished applying dqr") 	  
+            # Normalizing quality control assessments -- not sure this is needed b/c its set to true in ad_dqr_to_qc
+            datastream_obj.clean.normalize_assessment()
+            #print("Finished normalizing")
+            # Making sure 'missing_value' attribute is on flag and not its own attr
+            #print("Starting flag_values/missing values work")
+            for var_name in datastream_obj.data_vars:
+                if ('missing_value' in datastream_obj[var_name].attrs) and ('flag_values' in datastream_obj[var_name].attrs):
+                    datastream_obj[var_name].attrs['flag_values']=np.append(datastream_obj[var_name].attrs['flag_values'], -9999)
+                    if type(datastream_obj[var_name].attrs['flag_meanings'])==np.ndarray:
+                        datastream_obj[var_name].attrs['flag_meanings']=np.append(datastream_obj[var_name].attrs['flag_meanings'], 'missing')
+                    elif type(datastream_obj[var_name].attrs['flag_meanings'])==list:
+                        datastream_obj[var_name].attrs['flag_meanings'].append('missing')
+                    elif type(datastream_obj[var_name].attrs['flag_meanings'])==str:
+                        datastream_obj[var_name].attrs['flag_meanings'] += ' missing' 
+                    else:
+                        print("Flag means=ings is neight a np.ndarray, list, or string")
+                    del datastream_obj[var_name].attrs['missing_value']
+                elif 'missing_value' in datastream_obj[var_name].attrs:
+                    del datastream_obj[var_name].attrs['missing_value']
+            #print("Finished flag_values/missing values work")
 
-        ## Applying DQR's to each data variable available
-        dqr_vars = None
-        datastream_obj = act.qc.arm.add_dqr_to_qc(datastream_obj, variable=dqr_vars)
-
-        # Normalizing quality control assessments
-        datastream_obj.clean.normalize_assessment()
-
-        # Output the new neutral abl datastream containing the applied dqr to neut_{datastream} subdirectory
-        # of given output directory
-        datastream_path = Path(out_dir,micro_out_fn)
-        #product_path = f'{out_dir}/{micro_out_fn}' #-----------------------------------------------------------USE PATH OBJECT
-        datastream_obj.to_netcdf(datastream_path, format='NETCDF4')
-        print(f"Created {micro_out_fn} at path: {out_dir}")
+            # Output the new neutral abl datastream containing the applied dqr to neut_{datastream} subdirectory
+            # of given output directory
+            datastream_path = Path(out_dir,micro_out_fn)
+            try:
+                datastream_obj.to_netcdf(datastream_path, format='NETCDF4')
+            except Exception as e:
+                print("!!! Error message: ",e)
+            print(f"Created {micro_out_fn} at path: {out_dir}")
         date = date + datetime.timedelta(days=1)
-
     print("End Program!!")  
 
 
@@ -477,10 +632,14 @@ def datastream_idx(
 # Setting the code that should be run when script is run as main function
 ############# Main Program ################
 if __name__ == "__main__":
-
+	#Setting the initial path to be for the current working directory
 	p = Path.cwd()
-
-	parser = argparse.ArgumentParser()
+    #Setting up the positional arguments that the user must enter 
+	parser = argparse.ArgumentParser(
+		description = 'This is a function that reads in daily datastream NETCDF files. This module provides two functions:\n 1) creates daily pblhtsonde1mcfarl files from the multple sonding files of a given day ' 
+		'2) uses the neutral regime time/heights found in the daily pblhtsonde1mcfarl files to subset other datastreams. NOTE: You must generate the pblht files for a given site before subsetting a datastream for neutral regime info.'
+		'This opertion is done using the ACT reader and the subset dataset will be written to a new NETCDF file in an Output_files directory that will be generated at the provided path.',
+		epilog='Please note that the final positional argument is optional. If nothing is passed for this argument, you current working directory will be used as the location for which the newly created NETCDF files will be stored.')
 	parser.add_argument("data_stream", help="The data_stream to subset with neutral PBL info -- pblhtsonde1mcfarl,aossmps,microbasekaplus,etc. (String)")
 	parser.add_argument("site", help="The site to use -- SGP, ENA, HOU, NSA, ect. (String)")
 	parser.add_argument("facility", help="The facility for the given site -- C1,M1,E13,etc. (String)")
@@ -492,22 +651,50 @@ if __name__ == "__main__":
 	parser.add_argument("end_month", help="The month of the end date (Int 1-12)", type=int)
 	parser.add_argument("end_day", help="The day of end date (Int 1-31)", type=int)
 	parser.add_argument("sonde_facility", help="The facility the pblht file came from (same as facility if product is pblhtsonde1mcfarl) -- C1,M1,E13,etc. (String)")
-	parser.add_argument("home_dir", nargs='?', help="Chosen path for output files (/home/mishler). Will add 'Output_files' subdirectory to provided path", default=p)
+	parser.add_argument("home_dir", nargs='?', help="OPTIONAL. Chosen path for output files (/home/mishler). Will add 'Output_files' subdirectory to provided path", default=p)
 	args = parser.parse_args()
+	#Setting a path object to the directory provided by user (or to current working directory if none provided)
 	home_path = Path(args.home_dir)
+	#Ensuring that directory exists and building it if not
 	home_path.mkdir(parents=True, exist_ok=True)
-
-	output_drectory = Path(home_path, 'Output_files')
-
+	#Creating a path to an Output_files directory that will extend from home_path
+	output_drectory = Path(home_path, 'Output_files') 
 
 	site_loc = f'{args.site.lower()}{args.data_stream}{args.facility.upper()}.{args.data_lvl.lower()}'
-	end_date = (datetime.datetime(year=args.end_yr, month=args.end_month, day=args.end_day)).strftime("%Y%m%d")
-	strt_date = (datetime.datetime(year=args.strt_yr, month=args.strt_month, day=args.strt_day)).strftime("%Y%m%d")
+	#ensuring that date values entered are appropriate and that end date comes after start date
+	try:
+		end_date = (datetime.datetime(year=args.end_yr, month=args.end_month, day=args.end_day)).strftime("%Y%m%d")
+	except ValueError as e:
+		print("ERROR! Invalid input: ",e)
+		#print("Error! End date values are invalid. Make sure you are using valid Year Month and Day integers for input.")
+		exit()
+	except Exception as e:
+		print("An error has occurred with the provided end date information: ",e )
+	
+	try:
+		strt_date = (datetime.datetime(year=args.strt_yr, month=args.strt_month, day=args.strt_day)).strftime("%Y%m%d")
+	except ValueError as e:
+		#print(ValueError)
+		print("ERROR! Invalid input: ",e)
+		exit()
+	except Exception as e:
+		print("An error has occurred with the provided start date information: ",e)
+		exit()
+	
+	if datetime.datetime(year=args.end_yr, month=args.end_month, day=args.end_day) < datetime.datetime(year=args.strt_yr, month=args.strt_month, day=args.strt_day):
+		print(f"The ending date ({args.end_yr}/{args.end_month}/{args.end_day}) given comes before the given start date  ({args.strt_yr}/{args.strt_month}/{args.strt_day})")
+		exit()
 
 	print(f'We will be generating neutral regime {args.data_stream} sonding files from {site_loc} from {strt_date} to {end_date}.\n'
 	          f'Using output directory {output_drectory}')
 	newdir = output_drectory
-	newdir.mkdir(parents=True, exist_ok=True)
+	#Attempting to make the output_files directory if it does not yet exist
+	try:
+		newdir.mkdir(parents=True, exist_ok=True)
+	except Exception as e:
+		print("An ERROR occurred while trying to create output directory: ", newdir)
+		print("-----ERROR MESSAGE: ", e)
+		exit() 
 	
 	if args.data_stream == 'pblhtsonde1mcfarl':
 	    pbl_idx(out_dir=newdir,site=args.site.lower(),facility=args.facility.upper(),lvl=args.data_lvl.lower(),s_yr=args.strt_yr,
