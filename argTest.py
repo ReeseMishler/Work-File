@@ -5,8 +5,7 @@ from pathlib import Path
 import xarray as xr
 import act
 import numpy as np
-import os
-import generic_proc_idx 
+import os 
 from sys import exit
 
 def pbl_idx(
@@ -346,10 +345,9 @@ def datastream_idx(
     date = datetime.datetime(year=curr_yr, month=curr_mo, day=curr_day)
     #looping over each day in the provided date range
     while date < end_date:
-        micro_dataset_open = False
+        micro_dataset_open = False #Flag for choosing specific cases
         day_str = date.strftime("%Y%m%d")
-        #tag for finding daily datastream file in archive
-
+        #tag for finding daily datastream file in archive 
         out_tag = f'{site}{datastream}{facility}_{day_str}'
         micro_in_day = f'{site_loc2}.{day_str}*'
         #Using day to name output NETCDF file
@@ -366,12 +364,14 @@ def datastream_idx(
             num_files += 1
         if num_files > 1:
             print(f'More than one daily {datastream} file for {day_str}. Number of files: {num_files} \n Creating multiple daily files..')
-            #date = date + datetime.timedelta(days=1)
-            #continue
+            #Keeping track of number of files as to append to outputfile name
             cc = 1
             files = micro_in.glob('*.' + day_str + '.*')
-            for file in files: #need an and statement for (is this file one) bc we need to concat
+            for file in files: 
+            	#Case of multiple daily files: Adding the hour tage to the file
                 print(file)
+                trying = str(file)
+                output_time = trying[-9:-4]
                 if (datastream not in datastream_set) and (cc==1): 
                     dsA = act.io.armfiles.read_netcdf(str(file), drop_variables=[])
                     
@@ -379,20 +379,24 @@ def datastream_idx(
                     
                     dsA = act.io.armfiles.read_netcdf(str(file), keep_variables=keep_vars)
 
-                    #STARTING INSERT
+                #Setting path to pblinfo files that contain info to subset datastream
                 pbl_path = Path(pbl_directory, f'{sonde_site_loc}_{day_str}*')
                 try:
                     pbl_obj = act.io.armfiles.read_netcdf(str(pbl_path))
                 except OSError as e:
                     print(f"------No {site}{sonde_facility} pbl info files for {day_str} at {pbl_path}")
-                    #print("             ERROR meassage: ", e) 
-                    date = date + datetime.timedelta(days=1)
-                    continue
+                    #print("             ERROR meassage: ", e)
+                    cc+=1
+                    break 
+                    #date = date + datetime.timedelta(days=1)
+                    #continue
                 except Exception as e:
                     print("------An unforseen error occurred while creating pblht dataset for path ", pbl_path)
                     print("          Error message: ", e)
-                    date = date + datetime.timedelta(days=1)
-                    continue
+                    cc+=1
+                    #date = date + datetime.timedelta(days=1)
+                    break
+                    #continue
                         #Ensuring the pblht file is in order WRT time, applying DQR for regime type and pbl height, and applying QC     
                 pbl_obj = pbl_obj.sortby('time')
                 pbl_obj.clean.cleanup()
@@ -406,7 +410,9 @@ def datastream_idx(
                 pbl_obj.qcfilter.datafilter(variables='qc_pbl_height_liu_liang', rm_assessments=['Bad', 'Incorrect'])
                 # SELECT NEUTRAL REGIME ONLY from pblht dataset 
                 pbl_obj = pbl_obj.sel(time=pbl_obj['pbl_regime_type_liu_liang'] == 0)
-
+                #######SETTING UP INTITAL PIECE OF NEUTRALLY SUBSET data stream AND THEN ADDING PIECES TO IT#########
+                # subsetting datastream by neutral boundary layer info
+                # We are using 90 minutes before and after a given launch time w/ neutral regime
                 try:
                     aaa = pbl_obj['time'][0].values - np.timedelta64(90, 'm')  # 90 min before launch
                     bbb = pbl_obj['time'][0].values + np.timedelta64(90, 'm')  # 90 min after launch
@@ -414,22 +420,24 @@ def datastream_idx(
                 except IndexError as e:
                     print(f"-----No neutral regime times for {day_str}")
                     #print("          ERROR message: ", e)
-                    date = date + datetime.timedelta(days=1)
-                    continue
+                    #date = date + datetime.timedelta(days=1)
+                    break
+                    #cc += 1
+                    #continue
                 except Exception as e: 
                     print(f"-----Unforseen ERROR ocured while subsetting datastream by pblht time/height for {day_str}")
                     print("            Error message: ", e)
-                    date = date + datetime.timedelta(days=1)
-                    continue
-                #some datastreams can be subset be the pblhgt as well as time
-                #print("Atarting the indexing of dsA")
+                    #date = date + datetime.timedelta(days=1)
+                    break
+                    #cc += 1
+                    #continue
+                #some datastreams can be subset be the pblhgt as well as time 
                 if 'height' in dsA.dims:
                     datastream_obj = dsA.sel(time=slice(aaa, bbb), height=slice(0, hgt))
-                else:
-                    #print("*******GOOOGLLE****************")
+                else: 
                     datastream_obj = dsA.sel(time=slice(aaa, bbb))
 
-                        ## Setting up an end to the loop
+                        ## Setting up an end to the loop concatenating neut pbl ht time segments
                 last = len(pbl_obj['time']) 
                 # looping through the remaining neutral boundary layer times for day & concatenating into one dataset 
                 for idx in range(1, last):
@@ -465,6 +473,7 @@ def datastream_idx(
                 datastream_obj.clean.normalize_assessment()
                 # Making sure 'missing_value' attribute is on flag and not its own attr
                 #print("Starting flag_values/missing values work")
+
                 for var_name in datastream_obj.data_vars:
                     if ('missing_value' in datastream_obj[var_name].attrs) and ('flag_values' in datastream_obj[var_name].attrs):
                         datastream_obj[var_name].attrs['flag_values']=np.append(datastream_obj[var_name].attrs['flag_values'], -9999)
@@ -482,7 +491,7 @@ def datastream_idx(
 
                 # Output the new neutral abl datastream containing the applied dqr to neut_{datastream} subdirectory
                 # of given output directory
-                micro_out_fn = f'{out_tag}({cc})_neuPbl.nc'
+                micro_out_fn = f'{out_tag}.{output_time}_neuPbl.nc'
                 datastream_path = Path(out_dir,micro_out_fn)
                 try:
                     datastream_obj.to_netcdf(datastream_path, format='NETCDF4')
@@ -499,7 +508,8 @@ def datastream_idx(
         #Checking if datastream is one that has been added to datastream set, and if not, keeping all data variables
         else: #only one datafile
             if (datastream not in datastream_set) and (micro_dataset_open==False): 
-                dsA = act.io.armfiles.read_netcdf(str(micro_in_path), drop_variables=[]) 
+                dsA = act.io.armfiles.read_netcdf(str(micro_in_path), drop_variables=[])
+                print("read in data file as dataset...") 
             elif micro_dataset_open==False:
                 dsA = act.io.armfiles.read_netcdf(str(micro_in_path), keep_variables=keep_vars) #----------------------------------NEED TO ONLY DO THIS IF DSA UNOPENED
             #print("Past the second opening of datafile")
@@ -523,6 +533,7 @@ def datastream_idx(
             #Ensuring the pblht file is in order WRT time, applying DQR for regime type and pbl height, and applying QC     
             pbl_obj = pbl_obj.sortby('time')
             pbl_obj.clean.cleanup()
+            print("Sorted pbl obj by time and cleaned")
             var2 = 'pbl_regime_type_liu_liang'
             pbl_obj = act.qc.arm.add_dqr_to_qc(pbl_obj, variable=var2)
             pbl_obj.clean.normalize_assessment()
@@ -553,6 +564,7 @@ def datastream_idx(
                 print("            Error message: ", e)
                 date = date + datetime.timedelta(days=1)
                 continue
+            print("retrieved initial indexing values")
             #some datastreams can be subset be the pblhgt as well as time
             #print("Atarting the indexing of dsA")
             if 'height' in dsA.dims:
@@ -560,6 +572,7 @@ def datastream_idx(
             else:
                 #print("*******GOOOGLLE****************")
                 datastream_obj = dsA.sel(time=slice(aaa, bbb))
+            print("subset dataset")
             #print("Finished first indexing of dsA")
         
 
@@ -588,16 +601,16 @@ def datastream_idx(
                     else:
                         temp = dsA.sel(time=slice(strt, end))
                     datastream_obj = xr.concat([datastream_obj, temp], dim='time')
+            print("finished concat of neutral times for dataset")
             #print("Finished FULLY indexing of dsA")
             ## Getting into correct format for DQR application
             datastream_obj.clean.cleanup()
             #print("Finished cleaning")
             ## Applying DQR's to each data variable available
-            datastream_obj = act.qc.arm.add_dqr_to_qc(datastream_obj)
-            #print("Finished applying dqr") 	  
+            datastream_obj = act.qc.arm.add_dqr_to_qc(datastream_obj) 
             # Normalizing quality control assessments -- not sure this is needed b/c its set to true in ad_dqr_to_qc
             datastream_obj.clean.normalize_assessment()
-            #print("Finished normalizing")
+            print("Cleaned, added DQR, normalized") 
             # Making sure 'missing_value' attribute is on flag and not its own attr
             #print("Starting flag_values/missing values work")
             for var_name in datastream_obj.data_vars:
@@ -614,16 +627,20 @@ def datastream_idx(
                     del datastream_obj[var_name].attrs['missing_value']
                 elif 'missing_value' in datastream_obj[var_name].attrs:
                     del datastream_obj[var_name].attrs['missing_value']
+            print("Handled missing value flags --- commented code out")
             #print("Finished flag_values/missing values work")
 
             # Output the new neutral abl datastream containing the applied dqr to neut_{datastream} subdirectory
             # of given output directory
             datastream_path = Path(out_dir,micro_out_fn)
-            try:
-                datastream_obj.to_netcdf(datastream_path, format='NETCDF4')
-            except Exception as e:
-                print("!!! Error message: ",e)
+            datastream_obj.to_netcdf(datastream_path, format='NETCDF4')
             print(f"Created {micro_out_fn} at path: {out_dir}")
+            #try:
+            #    datastream_obj.to_netcdf(datastream_path, format='NETCDF4')
+            #    print(f"Created {micro_out_fn} at path: {out_dir}")
+            #except Exception as e:
+            #    print("!!! Error creating netcdf file with dataset: ",e)
+            
         date = date + datetime.timedelta(days=1)
     print("End Program!!")  
 
@@ -684,7 +701,7 @@ if __name__ == "__main__":
 	if datetime.datetime(year=args.end_yr, month=args.end_month, day=args.end_day) < datetime.datetime(year=args.strt_yr, month=args.strt_month, day=args.strt_day):
 		print(f"The ending date ({args.end_yr}/{args.end_month}/{args.end_day}) given comes before the given start date  ({args.strt_yr}/{args.strt_month}/{args.strt_day})")
 		exit()
-
+    #Displaying user input 
 	print(f'We will be generating neutral regime {args.data_stream} sonding files from {site_loc} from {strt_date} to {end_date}.\n'
 	          f'Using output directory {output_drectory}')
 	newdir = output_drectory
